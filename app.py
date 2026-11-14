@@ -34,27 +34,38 @@ TABLE_MAP = {
 TABLE_5_LABEL = "Table 5 - Standard Wise (50 Standards)"
 AREA_MAP = {"Service Provision":"Area Service Provision","Patients Right":"Area Patients Right","Inputs":"Area Inputs","Support Services":"Area Support Services","Wellness & Clinical":"Area Wellness Clinical Services","Infection Control":"Area Infection Control","Quality Management":"Area Quality Management","Outcome":"Area Outcome"}
 
-f1, f2, f3, f4, f5 = st.columns([1.5, 2, 1.5, 1, 0.8])
+# ===== FILTER BAR - District | Table | Facility | Area =====
+f1, f2, f3, f4 = st.columns([1.3, 1.8, 1.8, 1.3])
 with f1:
     dist_list = ["Sabhi District"] + sorted(df["District"].dropna().astype(str).unique().tolist()) if "District" in df.columns else ["Sabhi District"]
     sel_dist = st.selectbox("District:", dist_list)
 with f2:
     sel_table = st.selectbox("Table:", ["Table 2 - Indicators","Table 3 - Area Wise (8 Areas)","Table 4 - Theme Wise (12 Themes)", TABLE_5_LABEL], index=1)
 with f3:
-    sel_area = st.selectbox("Area:", ["Sabhi Area","Service Provision","Patients Right","Inputs","Support Services","Wellness & Clinical","Infection Control","Quality Management","Outcome"])
+    # Facility list - District ke hisaab se
+    temp_df = df.copy()
+    if sel_dist != "Sabhi District":
+        temp_df = temp_df[temp_df["District"].astype(str)==sel_dist]
+    fac_list = ["Sabhi Facility"] + sorted(temp_df["Name of the facility"].dropna().astype(str).unique().tolist()) if "Name of the facility" in df.columns else ["Sabhi Facility"]
+    sel_fac = st.selectbox("Facility Select Karo:", fac_list)
 with f4:
-    st.write(""); st.write("")
-    st.button("🔍 Apply Filter")
-with f5:
-    st.write(""); st.write("")
-    if st.button("↺ Reset"):
+    sel_area = st.selectbox("Area:", ["Sabhi Area","Service Provision","Patients Right","Inputs","Support Services","Wellness & Clinical","Infection Control","Quality Management","Outcome"])
+
+c_btn1, c_btn2 = st.columns([1,1])
+with c_btn1:
+    st.button("🔍 Apply Filter", use_container_width=True)
+with c_btn2:
+    if st.button("↺ Reset", use_container_width=True):
         st.rerun()
 
+# --- Filter lagao ---
 fdf = df.copy()
 if sel_dist != "Sabhi District" and "District" in df.columns:
     fdf = fdf[fdf["District"].astype(str)==sel_dist]
+if sel_fac != "Sabhi Facility" and "Name of the facility" in df.columns:
+    fdf = fdf[fdf["Name of the facility"].astype(str)==sel_fac]
 if fdf.empty:
-    st.warning("Is District me koi Facility nahi hai")
+    st.warning("Is filter me koi Facility nahi hai")
     st.stop()
 
 col_overall = "Overall Score of Health facility"
@@ -64,7 +75,8 @@ highest = fdf[col_overall].max() if col_overall in fdf.columns else 0
 lowest = fdf[col_overall].min() if col_overall in fdf.columns else 0
 avg_pss = fdf["Patient Satisfaction Score"].mean() if "Patient Satisfaction Score" in fdf.columns else 0
 
-st.markdown(f"""<div class="metric-line">Total: {total} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_dist} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
+# 2 Decimal - Sab jagah .2f
+st.markdown(f"""<div class="metric-line">Total: {total} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_dist} &nbsp;|&nbsp; Facility: {sel_fac} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
 
 # --- Column chuno ---
 if sel_table == TABLE_5_LABEL:
@@ -78,15 +90,27 @@ if sel_area not in ["Sabhi Area","",None] and sel_table.startswith("Table 3"):
         cols = [AREA_MAP[sel_area]]
         short = [sel_area]
 if not cols:
-    st.error(f"Is Table ke column Excel me nahi mile.")
+    st.error("Is Table ke column Excel me nahi mile.")
     st.stop()
+
 vals = [fdf[c].mean() for c in cols]
-chart_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": vals}).sort_values("Avg Score %")
+# 2 Decimal wali Table
+chart_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": [f"{v:.2f}" for v in vals]}).sort_values("Avg Score %")
 
-# ===== ASLI EXPORT BUTTON - Yahi kaam karenge =====
-st.markdown("### 📥 Export Karo - In button pe click karte hi download hoga")
-e1, e2, e3 = st.columns(3)
+# --- Chart pehle banao taaki PNG Export me kaam aaye ---
+colors = ["#27AE60" if v>=70 else "#F39C12" if v>=50 else "#E74C3C" for v in vals]
+fig = go.Figure()
+if len(cols) > 15:
+    fig.add_trace(go.Bar(y=short, x=vals, orientation="h", marker_color=colors, text=[f"{v:.2f}%" for v in vals], textposition="outside"))
+    fig.update_layout(xaxis_range=[0,100], height=600)
+else:
+    fig.add_trace(go.Bar(x=short, y=vals, marker_color=colors, text=[f"{v:.2f}%" for v in vals], textposition="outside"))
+    fig.update_layout(yaxis_range=[0,100], height=550, xaxis_tickangle=-30)
+fig.update_layout(title=f"{sel_table} - {sel_fac if sel_fac!='Sabhi Facility' else sel_dist}", yaxis_title="Avg Score %")
 
+# ===== EXPORT BUTTON =====
+st.markdown("### 📥 Export Karo")
+e1, e2, e3, e4 = st.columns(4)
 def to_excel_bytes(sheets_dict):
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
@@ -96,54 +120,55 @@ def to_excel_bytes(sheets_dict):
     return buf.getvalue()
 
 with e1:
-    st.download_button("📥 Data Export (Filtered Excel)", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}_{sel_table[:10]}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    st.download_button("📥 Data Export", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e2:
-    # Full Report
     try:
         g = df.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
     except:
         g = pd.DataFrame()
     area_cols = TABLE_MAP["Table 3 - Area Wise (8 Areas)"]
-    area_df = pd.DataFrame({"Area": area_cols, "Avg Score": [fdf[c].mean() if c in fdf.columns else 0 for c in area_cols]})
-    st.download_button("📄 Full Report (3 Sheet Excel)", data=to_excel_bytes({"Filtered Facility": fdf, "District Wise": g, "Area Wise": area_df}), file_name="Full_Report_NQAS.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    area_df = pd.DataFrame({"Area": area_cols, "Avg Score": [f"{fdf[c].mean():.2f}" if c in fdf.columns else "0.00" for c in area_cols]})
+    st.download_button("📄 Full Report", data=to_excel_bytes({"Filtered Facility": fdf, "District Wise": g, "Area Wise": area_df}), file_name="Full_Report_NQAS.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e3:
-    st.download_button("📊 Chart Export (Chart Data Excel)", data=to_excel_bytes({"Chart Data": chart_df}), file_name=f"Chart_{sel_table[:10]}_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-
-st.info("💡 Chart ki photo chahiye to Chart ke upar Right side me Camera 📷 wale icon pe click karo - wahan se PNG download ho jayega.")
+    st.download_button("📊 Chart Data Excel", data=to_excel_bytes({"Chart Data": chart_df}), file_name=f"Chart_{sel_table[:10]}_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+with e4:
+    # Chart PNG Export - 2 tarika
+    try:
+        png_bytes = fig.to_image(format="png", width=1200, height=700, scale=2)
+        st.download_button("🖼️ Chart PNG Export", data=png_bytes, file_name=f"Chart_{sel_table[:10]}_{sel_dist}.png", mime="image/png", use_container_width=True)
+    except Exception as ex:
+        st.info("PNG ke liye Chart pe Camera 📷 icon dabao")
 
 tab1, tab2, tab3 = st.tabs(["📊 Chart + Table Wise", "🏥 Facility Wise", "🗺️ District Wise"])
-
 with tab1:
-    st.markdown(f"<h4 style='text-align:center'>{sel_table} - Chart ({sel_dist})</h4>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align:center'>{sel_table} - Chart ({sel_fac if sel_fac!='Sabhi Facility' else sel_dist})</h4>", unsafe_allow_html=True)
     c_chart, c_table = st.columns([1.4, 1])
     with c_chart:
-        colors = ["#27AE60" if v>=70 else "#F39C12" if v>=50 else "#E74C3C" for v in vals]
-        fig = go.Figure()
-        if len(cols) > 15:
-            fig.add_trace(go.Bar(y=short, x=vals, orientation="h", marker_color=colors, text=[f"{v:.1f}%" for v in vals], textposition="outside"))
-            fig.update_layout(xaxis_range=[0,100], height=600)
-        else:
-            fig.add_trace(go.Bar(x=short, y=vals, marker_color=colors, text=[f"{v:.1f}%" for v in vals], textposition="outside"))
-            fig.update_layout(yaxis_range=[0,100], height=550, xaxis_tickangle=-30)
-        fig.update_layout(title=sel_table, yaxis_title="Avg Score %")
         st.plotly_chart(fig, use_container_width=True)
     with c_table:
         st.markdown(f"<h5 style='text-align:center'>{sel_table} - Table (Weak se Strong)</h5>", unsafe_allow_html=True)
         st.dataframe(chart_df, use_container_width=True, height=550)
-
 with tab2:
     st.subheader("Facility Wise")
     show_cols = ["Name of the facility","District", col_overall, "Patient Satisfaction Score", "Area Service Provision","Area Inputs","Area Infection Control","Area Quality Management"]
     show_cols = [c for c in show_cols if c in fdf.columns]
-    st.dataframe(fdf[show_cols].sort_values(col_overall, ascending=False) if col_overall in fdf.columns else fdf[show_cols], use_container_width=True)
-
+    disp = fdf[show_cols].copy()
+    # 2 Decimal me dikhao
+    for c in disp.columns:
+        if c not in ["Name of the facility","District"]:
+            disp[c] = disp[c].map(lambda x: f"{x:.2f}" if pd.notna(x) else "")
+    st.dataframe(disp.sort_values(col_overall, ascending=False) if col_overall in fdf.columns else disp, use_container_width=True)
 with tab3:
     st.subheader("District Wise")
     if "District" in df.columns and col_overall in df.columns:
         g2 = df.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
+        g2["AvgOverall"] = g2["AvgOverall"].map(lambda x: f"{x:.2f}")
+        g2["AvgPSS"] = g2["AvgPSS"].map(lambda x: f"{x:.2f}")
         g2.columns = ["District","Facility Count","Avg Overall %","Avg PSS %"]
         st.dataframe(g2, use_container_width=True)
+        # Chart ke liye numeric wapas
+        g3 = df.groupby("District").agg(AvgOverall=(col_overall,"mean")).reset_index().sort_values("AvgOverall", ascending=False)
         fig3 = go.Figure()
-        fig3.add_trace(go.Bar(x=g2["District"], y=g2["Avg Overall %"], marker_color=["#27AE60" if v>=70 else "#F39C12" for v in g2["Avg Overall %"]], text=g2["Avg Overall %"].round(1).astype(str)+"%", textposition="outside"))
+        fig3.add_trace(go.Bar(x=g3["District"], y=g3["AvgOverall"], marker_color=["#27AE60" if v>=70 else "#F39C12" for v in g3["AvgOverall"]], text=[f"{v:.2f}%" for v in g3["AvgOverall"]], textposition="outside"))
         fig3.update_layout(yaxis_range=[0,100], xaxis_tickangle=-45, height=500)
         st.plotly_chart(fig3, use_container_width=True)
