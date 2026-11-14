@@ -153,7 +153,7 @@ with tab1:
                     elif v < 70: return "background-color:#FFE699"
                     else: return "background-color:#D9EAD3"
                 except: return ""
-            st.dataframe(show_df.style.applymap(color_row, subset=["Avg Score %"]).format({"Avg Score %":"{:.2f}"}), use_container_width=True, height=550)
+            st.dataframe(show_df, use_container_width=True, height=550)
 
 with tab2:
     st.subheader("Facility Wise Comparison")
