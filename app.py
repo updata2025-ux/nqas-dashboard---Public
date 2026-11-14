@@ -1,11 +1,9 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 
 st.set_page_config(page_title="NQAS Dashboard - UP", layout="wide")
 
-# --- Neeli Patti Wala Header ---
 st.markdown("""
 <style>
 .top-bar{background:#1a4a6e;color:white;padding:10px 15px;border-radius:5px;display:flex;justify-content:space-between;align-items:center}
@@ -21,39 +19,69 @@ if uploaded is None:
     st.info("👈 Left side se Excel file upload karo.")
     st.stop()
 
-try:
-    df = pd.read_excel(uploaded)
-except Exception as e:
-    st.error(f"File error: {e}")
-    st.stop()
-
+df = pd.read_excel(uploaded)
 df.columns = [str(c).strip() for c in df.columns]
 
-def find_col(keywords):
+# --- Sahi Column dhoondhne ka naya tarika ---
+# Pehle columns ke naam dikha do taaki galti pakdi jaye
+with st.expander("🔍 Columns check karo (mujhe iska screenshot bhejna)"):
+    st.write(list(df.columns))
+    for c in df.columns:
+        st.write(f"**{c}** -> Example: {df[c].dropna().astype(str).unique()[:4].tolist()}")
+
+def find_by_value_text(keyword):
+    # Aisa column jisme uske andar wale values me wo word ho, jaise "Table 3"
+    best = None
+    best_score = 0
+    for c in df.columns:
+        vals = df[c].dropna().astype(str).str.lower()
+        score = vals.str.contains(keyword.lower()).mean()
+        if score > best_score and score > 0.5:
+            best_score = score
+            best = c
+    return best
+
+def find_by_name(keywords):
     for c in df.columns:
         cl = c.lower()
-        if any(k in cl for k in keywords):
+        if any(k == cl or k in cl for k in keywords):
             return c
     return None
 
-col_district = find_col(["district", "zilla", "janpad"])
-col_table = find_col(["table", "refer table"])
-col_area = find_col(["area of concern", "area", "concern"])
-col_facility = find_col(["facility", "hospital", "health facility", "name of", "institution"])
-col_overall = find_col(["overall score"])
-col_pss = find_col(["pss", "patient satisfaction", "satisfaction score"])
-col_agg = find_col(["aggregated", "area of concern"])
+col_table = find_by_value_text("table")
+if col_table is None:
+    col_table = find_by_name(["refer table", "table"])
+
+col_area = find_by_value_text("area")
+if col_area is None:
+    col_area = find_by_name(["area of concern", "area"])
+
+col_district = find_by_name(["district"])
+if col_district is None:
+    # District wala column - jisme sabse zyada text naam ho
+    for c in df.columns:
+        if "district" in c.lower() or "zilla" in c.lower():
+            col_district = c
+            break
+
+col_facility = find_by_name(["facility", "hospital", "health facility", "name of", "institution"])
+col_overall = None
+for c in df.columns:
+    if "overall" in c.lower() and "score" in c.lower():
+        col_overall = c
+        break
+col_pss = None
+for c in df.columns:
+    if "pss" in c.lower() or "patient satisfaction" in c.lower():
+        col_pss = c
+        break
 
 if col_facility is None:
-    if col_district and col_table:
-        df["Facility_Name_Temp"] = df[col_district].astype(str) + " - " + df[col_table].astype(str)
-        col_facility = "Facility_Name_Temp"
-    else:
-        df["Facility_Name_Temp"] = "Facility 1"
-        col_facility = "Facility_Name_Temp"
+    df["Facility_Name_Temp"] = df.index.astype(str) + " - Facility"
+    col_facility = "Facility_Name_Temp"
 
 if col_overall is None:
-    st.error(f"Overall Score column nahi mila. Columns: {list(df.columns)}")
+    st.error(f"Overall Score nahi mila. Columns: {list(df.columns)}")
     st.stop()
 
 df[col_overall] = pd.to_numeric(df[col_overall], errors="coerce")
@@ -61,25 +89,24 @@ df = df.dropna(subset=[col_overall])
 if col_pss:
     df[col_pss] = pd.to_numeric(df[col_pss], errors="coerce")
 
-# --- Upar Wale Filter ---
 def get_options(col):
-    if col is None: return ["Sabhi District" if "district" in str(col).lower() else "Sabhi"]
-    vals = sorted(df[col].dropna().astype(str).unique().tolist())
+    if col is None: return ["Sabhi"]
+    # Number wale values ko hata do - sirf text wale rakho
+    vals = df[col].dropna().astype(str).unique().tolist()
+    # Agar Table/Area hai to sirf wo rakho jisme Table/Area word ho ya text ho
+    vals = [v for v in vals if not v.replace(".","").replace("-","").strip().isdigit()]
+    vals = sorted(vals)
     return ["Sabhi"] + vals
 
 def is_all(v): return v is None or "sabhi" in str(v).lower() or "all" in str(v).lower()
 
 f1, f2, f3, f4 = st.columns([2,2,2,1.2])
-with f1:
-    sel_district = st.selectbox("District:", get_options(col_district))
-with f2:
-    sel_table = st.selectbox("Table:", get_options(col_table))
-with f3:
-    sel_area = st.selectbox("Area:", get_options(col_area))
+with f1: sel_district = st.selectbox("District:", get_options(col_district))
+with f2: sel_table = st.selectbox("Table:", get_options(col_table))
+with f3: sel_area = st.selectbox("Area:", get_options(col_area))
 with f4:
-    st.write("")
-    st.write("")
-    apply_btn = st.button("🔍 Apply Filter")
+    st.write(""); st.write("")
+    st.button("🔍 Apply Filter")
 
 fdf = df.copy()
 if col_district and not is_all(sel_district):
@@ -99,21 +126,16 @@ highest = fdf[col_overall].max()
 lowest = fdf[col_overall].min()
 avg_pss = fdf[col_pss].mean() if col_pss else avg_overall
 
-# --- Metric Line - Photo Jaisa ---
 st.markdown(f"""<div class="metric-line">Total: {total_fac} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_district} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📊 Chart + Table Wise", "🏥 Facility Wise", "🗺️ District Wise"])
 
 with tab1:
     st.markdown(f"<h4 style='text-align:center'>{sel_table} - Chart ({sel_district})</h4>", unsafe_allow_html=True)
-    # Area wise Average - Photo jaisa
     if col_area:
         area_df = fdf.groupby(col_area, as_index=False)[col_overall].mean().sort_values(col_overall)
         area_df.columns = ["Area", "Avg Score"]
-        # Color: 70 se kam Orange, 70+ Green
         area_df["Color"] = area_df["Avg Score"].apply(lambda x: "#FF8C00" if x < 70 else "#2EAF62")
-        # Table ke liye full naam
-        area_df["FullName"] = area_df["Area"]
         c_chart, c_table = st.columns([1.4, 1])
         with c_chart:
             fig = go.Figure()
@@ -122,9 +144,8 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
         with c_table:
             st.markdown(f"<h5 style='text-align:center'>{sel_table} - Table (Weak se Strong)</h5>", unsafe_allow_html=True)
-            show_df = area_df[["FullName","Avg Score"]].sort_values("Avg Score")
+            show_df = area_df[["Area","Avg Score"]].sort_values("Avg Score")
             show_df.columns = ["Indicator / Area / Standard", "Avg Score %"]
-            # Color wali table
             def color_row(val):
                 try:
                     v=float(val)
@@ -133,8 +154,6 @@ with tab1:
                     else: return "background-color:#D9EAD3"
                 except: return ""
             st.dataframe(show_df.style.applymap(color_row, subset=["Avg Score %"]).format({"Avg Score %":"{:.2f}"}), use_container_width=True, height=550)
-    else:
-        st.dataframe(fdf, use_container_width=True)
 
 with tab2:
     st.subheader("Facility Wise Comparison")
