@@ -184,7 +184,7 @@ with e1:
     st.download_button("📥 Data Export", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e2:
     try:
-        g = df.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
+        g = fdf.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
     except:
         g = pd.DataFrame()
     area_cols = TABLE_MAP["Table 3 - Area Wise (8 Areas)"]
