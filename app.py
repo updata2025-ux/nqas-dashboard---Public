@@ -197,7 +197,9 @@ with e4:
         png_bytes = fig.to_image(format="png", width=1200, height=700, scale=2)
         st.download_button("🖼️ Chart PNG Export", data=png_bytes, file_name=f"Chart_{sel_table[:10]}_{sel_dist}.png", mime="image/png", use_container_width=True)
     except Exception as ex:
-        st.info("PNG ke liye Chart pe Camera 📷 icon dabao")
+        pass
+        
+        #st.info("PNG ke liye Chart pe Camera 📷 icon dabao")
 
 tab1, tab2, tab3 = st.tabs(["📊 Chart + Table Wise", "🏥 Facility Wise", "🗺️ District Wise"])
 with tab1:
