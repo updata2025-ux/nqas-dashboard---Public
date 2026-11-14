@@ -11,6 +11,7 @@ st.markdown("""
 .top-bar h2{margin:0;color:white;font-size:22px}
 .metric-line{background:#f0f2f6;padding:8px 10px;font-weight:700;color:#1A5276;border-radius:5px;margin:8px 0px}
 .highlight-box{background:#FEF9E7;border:2px solid #F1C40F;padding:10px;border-radius:8px;margin:10px 0px}
+.step-box{background:#EAF2F8;border:1px solid #2E86C1;padding:10px;border-radius:8px;margin:5px 0px}
 </style>
 <div class="top-bar"><h2>🏥 NQAS Dashboard - UP</h2><div>Excel Load Karo</div></div>
 """, unsafe_allow_html=True)
@@ -58,35 +59,62 @@ with c_btn2:
     if st.button("↺ Reset", use_container_width=True):
         st.rerun()
 
-# ===== DROPDOWN WALA MULTIPLE STANDARD SELECT - SIRF TABLE 5 PE =====
+# ===== 2-STEP DROPDOWN - SIRF TABLE 5 PE =====
 table5_all_cols = [c for c in df.columns if re.match(r"^[A-H]\d+-", c)]
-# Chhota naam banao - G1, G2, H1... taaki Dropdown saaf lage
 short_to_full = {}
 for c in table5_all_cols:
-    short = c.split("-")[0].strip()  # G1, G2...
+    short = c.split("-")[0].strip()
     short_to_full[short] = c
 
 sel_standards = []
 if sel_table == TABLE_5_LABEL:
-    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Neeche Dropdown se Multiple Standard Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)}</div>""", unsafe_allow_html=True)
-    # DROPDOWN - Shuru me khaali rahega, chip nahi dikhenge
-    sel_short = st.multiselect(
-        "🔍 Standard Select Karo (Dropdown) - Ek se zyada chun sakte ho:",
-        options=list(short_to_full.keys()),
-        default=[],  # <-- Yahi fix hai, pehle saare 50 select the, ab khaali rahega
-        placeholder="Dropdown pe click karo aur Standard chuno - jaise G1, G2, H1...",
-        help="Dropdown kholo, jo Standard chahiye uspe click karo. Dobara click karne se hat jayega.",
-        key="std_multi_dropdown"
-    )
-    sel_standards = [short_to_full[s] for s in sel_short]
+    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Ab 2 Step me Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Step 1: A,B,C... chuno &nbsp;→&nbsp; Step 2: A1,A2... chuno</div>""", unsafe_allow_html=True)
+
+    # STEP 1 - A,B,C,D,E,F,G,H wala Dropdown
+    # Saare letter nikal lo - A se H tak
+    all_letters = sorted(list(set([s[0] for s in short_to_full.keys()])))  # ['A','B','C','D','E','F','G','H']
+    col_step1, col_step2 = st.columns(2)
+    with col_step1:
+        st.markdown("<div class='step-box'><b>Step 1 - Area Letter Chuno:</b></div>", unsafe_allow_html=True)
+        sel_letters = st.multiselect(
+            "1️⃣ A,B,C,D,E,F,G,H me se chuno:",
+            options=all_letters,
+            default=[],
+            placeholder="Dropdown kholo - A, B, C... chuno",
+            help="A chunoge to sirf A wale Standard aayenge. A,B chunoge to A1 se B5 tak aayenge.",
+            key="letter_multi"
+        )
+    # STEP 2 - Sirf chuney hue Letter wale Standard dikhao
+    with col_step2:
+        st.markdown("<div class='step-box'><b>Step 2 - Standard Chuno:</b></div>", unsafe_allow_html=True)
+        if len(sel_letters)==0:
+            st.info("👈 Pehle Step 1 se A / B / C... chuno, tabhi yahan Standard aayenge.")
+            sel_short = []
+        else:
+            # Filter - Sirf un Letter wale Standard
+            # A select -> A1,A2... | A,B select -> A1..A.., B1..B5..
+            filtered_shorts = [s for s in sorted(short_to_full.keys()) if s[0] in sel_letters]
+            st.caption(f"Step 1 me chuney: {', '.join(sel_letters)} → Yahan {len(filtered_shorts)} Standard aaye: {', '.join(filtered_shorts)}")
+            sel_short = st.multiselect(
+                "2️⃣ Standard Select Karo (Dropdown):",
+                options=filtered_shorts,
+                default=[],
+                placeholder="Dropdown kholo - A1, A2... chuno",
+                help="Yahan sirf Step 1 me chuney hue Letter wale Standard dikhenge.",
+                key="std_multi_dropdown"
+            )
+        sel_standards = [short_to_full[s] for s in sel_short]
+
+    if len(sel_letters)==0:
+        st.info("👆 Step 1 se pehle A / B / C... chuno.")
+        st.stop()
     if len(sel_standards)==0:
-        st.info("👆 Upar wale Dropdown se kam se kam 1 Standard chuno, tabhi Chart banega. Jaise G1, G2 chuno.")
-        # Chart banane ke liye ruko, lekin baaki page dikhta rahe isliye yahan stop karte hai
+        st.info("👆 Step 2 se ab A1, A2... chuno, tabhi Chart banega.")
         st.stop()
     else:
-        st.caption(f"👉 Chuney hue Standard: {', '.join(sel_short)}  |  Total: {len(sel_standards)} / {len(table5_all_cols)}")
+        st.success(f"✅ Chuney hue: Letter = {', '.join(sel_letters)}  |  Standard = {', '.join(sel_short)}  |  Total: {len(sel_standards)}")
 else:
-    st.caption("ℹ️ Multiple Standard wala Dropdown sirf **Table 5 - Standard Wise** select karne pe khulega.")
+    st.caption("ℹ️ A,B,C... wala 2-Step Dropdown sirf **Table 5 - Standard Wise** select karne pe khulega.")
 
 # --- Filter lagao ---
 fdf = df.copy()
