@@ -58,28 +58,35 @@ with c_btn2:
     if st.button("↺ Reset", use_container_width=True):
         st.rerun()
 
-# ===== NAYA BUTTON - MULTIPLE STANDARD SELECT - SIRF TABLE 5 PE CHALEGA =====
-# Table 5 ke saare Standard nikal lo
+# ===== DROPDOWN WALA MULTIPLE STANDARD SELECT - SIRF TABLE 5 PE =====
 table5_all_cols = [c for c in df.columns if re.match(r"^[A-H]\d+-", c)]
-sel_standards = []  # default khali
+# Chhota naam banao - G1, G2, H1... taaki Dropdown saaf lage
+short_to_full = {}
+for c in table5_all_cols:
+    short = c.split("-")[0].strip()  # G1, G2...
+    short_to_full[short] = c
 
+sel_standards = []
 if sel_table == TABLE_5_LABEL:
-    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Ab Neeche se Multiple Standard Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Jo chunoge, Chart sirf unhi ka banega</div>""", unsafe_allow_html=True)
-    # Multiselect - Ek saath kai Standard chun sakte ho
-    sel_standards = st.multiselect(
-        "🔍 Multiple Standard Select Karo (Table 5 ke liye) - Ek se zyada chun sakte ho:",
-        options=table5_all_cols,
-        default=table5_all_cols,  # Shuru me saare select rahenge, tum hata / chun sakte ho
-        help="Table 5 select karne pe hi ye kaam karega. Ctrl / tap karke kai Standard chuno.",
-        key="std_multi"
+    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Neeche Dropdown se Multiple Standard Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)}</div>""", unsafe_allow_html=True)
+    # DROPDOWN - Shuru me khaali rahega, chip nahi dikhenge
+    sel_short = st.multiselect(
+        "🔍 Standard Select Karo (Dropdown) - Ek se zyada chun sakte ho:",
+        options=list(short_to_full.keys()),
+        default=[],  # <-- Yahi fix hai, pehle saare 50 select the, ab khaali rahega
+        placeholder="Dropdown pe click karo aur Standard chuno - jaise G1, G2, H1...",
+        help="Dropdown kholo, jo Standard chahiye uspe click karo. Dobara click karne se hat jayega.",
+        key="std_multi_dropdown"
     )
-    st.caption(f"👉 Chuney hue Standard: {len(sel_standards)} / {len(table5_all_cols)}")
+    sel_standards = [short_to_full[s] for s in sel_short]
     if len(sel_standards)==0:
-        st.warning("⚠️ Koi Standard nahi chuna hai. Upar se kam se kam 1 Standard chuno.")
+        st.info("👆 Upar wale Dropdown se kam se kam 1 Standard chuno, tabhi Chart banega. Jaise G1, G2 chuno.")
+        # Chart banane ke liye ruko, lekin baaki page dikhta rahe isliye yahan stop karte hai
         st.stop()
+    else:
+        st.caption(f"👉 Chuney hue Standard: {', '.join(sel_short)}  |  Total: {len(sel_standards)} / {len(table5_all_cols)}")
 else:
-    # Baaki Table pe ye box band / highlight nahi hoga
-    st.caption("ℹ️ Multiple Standard wala option sirf **Table 5 - Standard Wise** select karne pe khulega. Abhi Table 5 select nahi hai, isliye wo band hai.")
+    st.caption("ℹ️ Multiple Standard wala Dropdown sirf **Table 5 - Standard Wise** select karne pe khulega.")
 
 # --- Filter lagao ---
 fdf = df.copy()
@@ -97,12 +104,9 @@ avg_overall = fdf[col_overall].mean() if col_overall in fdf.columns else 0
 highest = fdf[col_overall].max() if col_overall in fdf.columns else 0
 lowest = fdf[col_overall].min() if col_overall in fdf.columns else 0
 avg_pss = fdf["Patient Satisfaction Score"].mean() if "Patient Satisfaction Score" in fdf.columns else 0
-
 st.markdown(f"""<div class="metric-line">Total: {total} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_dist} &nbsp;|&nbsp; Facility: {sel_fac} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
 
-# --- Column chuno ---
 if sel_table == TABLE_5_LABEL:
-    # Yahan wahi chuney hue Standard kaam karenge
     cols = [c for c in sel_standards if c in fdf.columns]
     short = [c.split("-")[0] for c in cols]
 else:
@@ -118,7 +122,6 @@ if not cols:
 
 vals = [fdf[c].mean() for c in cols]
 chart_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": [f"{v:.2f}" for v in vals]}).sort_values("Avg Score %")
-
 colors = ["#27AE60" if v>=70 else "#F39C12" if v>=50 else "#E74C3C" for v in vals]
 fig = go.Figure()
 if len(cols) > 15:
@@ -129,7 +132,6 @@ else:
     fig.update_layout(yaxis_range=[0,100], height=550, xaxis_tickangle=-30)
 fig.update_layout(title=f"{sel_table} - {sel_fac if sel_fac!='Sabhi Facility' else sel_dist}", yaxis_title="Avg Score %")
 
-# ===== EXPORT BUTTON =====
 st.markdown("### 📥 Export Karo")
 e1, e2, e3, e4 = st.columns(4)
 def to_excel_bytes(sheets_dict):
@@ -139,7 +141,6 @@ def to_excel_bytes(sheets_dict):
             d.to_excel(w, sheet_name=name[:31], index=False)
     buf.seek(0)
     return buf.getvalue()
-
 with e1:
     st.download_button("📥 Data Export", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e2:
