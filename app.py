@@ -36,6 +36,18 @@ TABLE_MAP = {
 TABLE_5_LABEL = "Table 5 - Standard Wise (50 Standards)"
 AREA_MAP = {"Service Provision":"Area Service Provision","Patients Right":"Area Patients Right","Inputs":"Area Inputs","Support Services":"Area Support Services","Wellness & Clinical":"Area Wellness Clinical Services","Infection Control":"Area Infection Control","Quality Management":"Area Quality Management","Outcome":"Area Outcome"}
 
+# ===== A-H KI JAGAH POORA NAAM - Yahi naya mapping hai =====
+LETTER_LABEL = {
+    "A": "A- Service Provision",
+    "B": "B- Patients Right",
+    "C": "C- Inputs",
+    "D": "D- Support Services",
+    "E": "E- Wellness Clinical Services",
+    "F": "F- Infection Control",
+    "G": "G- Quality Management",
+    "H": "H- Outcome"
+}
+
 # ===== FILTER BAR =====
 f1, f2, f3, f4 = st.columns([1.3, 1.8, 1.8, 1.3])
 with f1:
@@ -68,53 +80,51 @@ for c in table5_all_cols:
 
 sel_standards = []
 if sel_table == TABLE_5_LABEL:
-    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Ab 2 Step me Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Step 1: A,B,C... chuno &nbsp;→&nbsp; Step 2: A1,A2... chuno</div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Ab 2 Step me Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Step 1: Area chuno &nbsp;→&nbsp; Step 2: Standard chuno</div>""", unsafe_allow_html=True)
 
-    # STEP 1 - A,B,C,D,E,F,G,H wala Dropdown
-    # Saare letter nikal lo - A se H tak
-    all_letters = sorted(list(set([s[0] for s in short_to_full.keys()])))  # ['A','B','C','D','E','F','G','H']
+    all_letters = sorted(list(set([s[0] for s in short_to_full.keys()])))
     col_step1, col_step2 = st.columns(2)
     with col_step1:
-        st.markdown("<div class='step-box'><b>Step 1 - Area Letter Chuno:</b></div>", unsafe_allow_html=True)
+        st.markdown("<div class='step-box'><b>Step 1 - Area Chuno:</b></div>", unsafe_allow_html=True)
         sel_letters = st.multiselect(
-            "1️⃣ A,B,C,D,E,F,G,H me se chuno:",
+            "1️⃣ Area Select Karo:",
             options=all_letters,
             default=[],
-            placeholder="Dropdown kholo - A, B, C... chuno",
-            help="A chunoge to sirf A wale Standard aayenge. A,B chunoge to A1 se B5 tak aayenge.",
+            placeholder="Dropdown kholo - A- Service Provision, B- Patients Right... chuno",
+            format_func=lambda x: LETTER_LABEL.get(x, x),  # <-- Yahi line A ki jagah A- Service Provision dikhayegi
+            help="A- Service Provision chunoge to sirf A wale Standard aayenge. A aur B chunoge to A1 se B5 tak aayenge.",
             key="letter_multi"
         )
-    # STEP 2 - Sirf chuney hue Letter wale Standard dikhao
     with col_step2:
         st.markdown("<div class='step-box'><b>Step 2 - Standard Chuno:</b></div>", unsafe_allow_html=True)
         if len(sel_letters)==0:
-            st.info("👈 Pehle Step 1 se A / B / C... chuno, tabhi yahan Standard aayenge.")
+            st.info("👈 Pehle Step 1 se Area chuno, tabhi yahan Standard aayenge.")
             sel_short = []
         else:
-            # Filter - Sirf un Letter wale Standard
-            # A select -> A1,A2... | A,B select -> A1..A.., B1..B5..
             filtered_shorts = [s for s in sorted(short_to_full.keys()) if s[0] in sel_letters]
-            st.caption(f"Step 1 me chuney: {', '.join(sel_letters)} → Yahan {len(filtered_shorts)} Standard aaye: {', '.join(filtered_shorts)}")
+            sel_labels = [LETTER_LABEL.get(l, l) for l in sel_letters]
+            st.caption(f"Step 1 me chuney: {', '.join(sel_labels)} → Yahan {len(filtered_shorts)} Standard aaye: {', '.join(filtered_shorts)}")
             sel_short = st.multiselect(
                 "2️⃣ Standard Select Karo (Dropdown):",
                 options=filtered_shorts,
                 default=[],
                 placeholder="Dropdown kholo - A1, A2... chuno",
-                help="Yahan sirf Step 1 me chuney hue Letter wale Standard dikhenge.",
+                help="Yahan sirf Step 1 me chuney hue Area wale Standard dikhenge.",
                 key="std_multi_dropdown"
             )
         sel_standards = [short_to_full[s] for s in sel_short]
 
     if len(sel_letters)==0:
-        st.info("👆 Step 1 se pehle A / B / C... chuno.")
+        st.info("👆 Step 1 se pehle Area chuno - jaise A- Service Provision.")
         st.stop()
     if len(sel_standards)==0:
         st.info("👆 Step 2 se ab A1, A2... chuno, tabhi Chart banega.")
         st.stop()
     else:
-        st.success(f"✅ Chuney hue: Letter = {', '.join(sel_letters)}  |  Standard = {', '.join(sel_short)}  |  Total: {len(sel_standards)}")
+        sel_labels2 = [LETTER_LABEL.get(l, l) for l in sel_letters]
+        st.success(f"✅ Chuney hue: Area = {', '.join(sel_labels2)}  |  Standard = {', '.join(sel_short)}  |  Total: {len(sel_standards)}")
 else:
-    st.caption("ℹ️ A,B,C... wala 2-Step Dropdown sirf **Table 5 - Standard Wise** select karne pe khulega.")
+    st.caption("ℹ️ Area + Standard wala 2-Step Dropdown sirf **Table 5 - Standard Wise** select karne pe khulega.")
 
 # --- Filter lagao ---
 fdf = df.copy()
