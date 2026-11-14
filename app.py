@@ -47,21 +47,21 @@ LETTER_LABEL = {
     "H": "H- Outcome"
 }
 
-# ===== FILTER BAR =====
+# ===== FILTER BAR - Sabhi ki jagah All =====
 f1, f2, f3, f4 = st.columns([1.3, 1.8, 1.8, 1.3])
 with f1:
-    dist_list = ["Sabhi District"] + sorted(df["District"].dropna().astype(str).unique().tolist()) if "District" in df.columns else ["Sabhi District"]
+    dist_list = ["All District"] + sorted(df["District"].dropna().astype(str).unique().tolist()) if "District" in df.columns else ["All District"]
     sel_dist = st.selectbox("District:", dist_list)
 with f2:
     sel_table = st.selectbox("Table:", ["Table 2 - Indicators","Table 3 - Area Wise (8 Areas)","Table 4 - Theme Wise (12 Themes)", TABLE_5_LABEL], index=1)
 with f3:
     temp_df = df.copy()
-    if sel_dist != "Sabhi District":
+    if sel_dist != "All District":
         temp_df = temp_df[temp_df["District"].astype(str)==sel_dist]
-    fac_list = ["Sabhi Facility"] + sorted(temp_df["Name of the facility"].dropna().astype(str).unique().tolist()) if "Name of the facility" in df.columns else ["Sabhi Facility"]
+    fac_list = ["All Facility"] + sorted(temp_df["Name of the facility"].dropna().astype(str).unique().tolist()) if "Name of the facility" in df.columns else ["All Facility"]
     sel_fac = st.selectbox("Facility Select Karo:", fac_list)
 with f4:
-    sel_area = st.selectbox("Area:", ["Sabhi Area","Service Provision","Patients Right","Inputs","Support Services","Wellness & Clinical","Infection Control","Quality Management","Outcome"])
+    sel_area = st.selectbox("Area:", ["All Area","Service Provision","Patients Right","Inputs","Support Services","Wellness & Clinical","Infection Control","Quality Management","Outcome"])
 
 c_btn1, c_btn2 = st.columns([1,1])
 with c_btn1:
@@ -109,11 +109,9 @@ if sel_table == TABLE_5_LABEL:
                 options=filtered_shorts,
                 default=[],
                 placeholder="Khaali chhodo to saare aa jayenge - A1, A2...",
-                help="Khaali chhodo to Step 1 wale saare Standard ka Chart banega. Kuch hatana hai to yahan chuno.",
+                help="Khaali chhodo to Step 1 wale saare Standard ka Chart banega.",
                 key="std_multi_dropdown"
             )
-        # ===== FIX 2 - Step 1 chunte hi Chart =====
-        # Agar Step 2 khaali hai to Step 1 wale SAARRE Standard auto le lo
         if len(sel_letters)>0 and len(sel_short)==0:
             sel_short = filtered_shorts
             st.info(f"ℹ️ Step 2 khaali hai, isliye Step 1 wale saare {len(sel_short)} Standard ka Chart ban raha hai.")
@@ -130,9 +128,9 @@ else:
 
 # --- Filter lagao ---
 fdf = df.copy()
-if sel_dist != "Sabhi District" and "District" in df.columns:
+if sel_dist != "All District" and "District" in df.columns:
     fdf = fdf[fdf["District"].astype(str)==sel_dist]
-if sel_fac != "Sabhi Facility" and "Name of the facility" in df.columns:
+if sel_fac != "All Facility" and "Name of the facility" in df.columns:
     fdf = fdf[fdf["Name of the facility"].astype(str)==sel_fac]
 if fdf.empty:
     st.warning("Is filter me koi Facility nahi hai")
@@ -152,7 +150,7 @@ if sel_table == TABLE_5_LABEL:
 else:
     cols = [c for c in TABLE_MAP.get(sel_table, []) if c in fdf.columns]
     short = [c.replace("Area ","").replace(" Score","") for c in cols]
-if sel_area not in ["Sabhi Area","",None] and sel_table.startswith("Table 3"):
+if sel_area not in ["All Area","",None] and sel_table.startswith("Table 3"):
     if sel_area in AREA_MAP:
         cols = [AREA_MAP[sel_area]]
         short = [sel_area]
@@ -161,9 +159,6 @@ if not cols:
     st.stop()
 
 vals = [fdf[c].mean() for c in cols]
-# ===== FIX 1 - Double hataya: Ab sirf 1 baar naam aayega =====
-# Pehle tha: f"{s} - {full}" -> A1 - A1-The facility... (Double)
-# Ab hai: sirf full -> A1-The facility... (Single)
 chart_df = pd.DataFrame({"Indicator / Area / Standard": [full[:70] for full in cols], "Avg Score %": [f"{v:.2f}" for v in vals]}).sort_values("Avg Score %")
 
 colors = ["#27AE60" if v>=70 else "#F39C12" if v>=50 else "#E74C3C" for v in vals]
@@ -174,7 +169,7 @@ if len(cols) > 15:
 else:
     fig.add_trace(go.Bar(x=short, y=vals, marker_color=colors, text=[f"{v:.2f}%" for v in vals], textposition="outside"))
     fig.update_layout(yaxis_range=[0,100], height=550, xaxis_tickangle=-30)
-fig.update_layout(title=f"{sel_table} - {sel_fac if sel_fac!='Sabhi Facility' else sel_dist}", yaxis_title="Avg Score %")
+fig.update_layout(title=f"{sel_table} - {sel_fac if sel_fac!='All Facility' else sel_dist}", yaxis_title="Avg Score %")
 
 st.markdown("### 📥 Export Karo")
 e1, e2, e3, e4 = st.columns(4)
@@ -206,7 +201,7 @@ with e4:
 
 tab1, tab2, tab3 = st.tabs(["📊 Chart + Table Wise", "🏥 Facility Wise", "🗺️ District Wise"])
 with tab1:
-    st.markdown(f"<h4 style='text-align:center'>{sel_table} - Chart ({sel_fac if sel_fac!='Sabhi Facility' else sel_dist})</h4>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align:center'>{sel_table} - Chart ({sel_fac if sel_fac!='All Facility' else sel_dist})</h4>", unsafe_allow_html=True)
     c_chart, c_table = st.columns([1.4, 1])
     with c_chart:
         st.plotly_chart(fig, use_container_width=True)
