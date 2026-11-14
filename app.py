@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import re
+import re, io
 
 st.set_page_config(page_title="NQAS Dashboard - UP", layout="wide")
 
@@ -11,7 +11,7 @@ st.markdown("""
 .top-bar h2{margin:0;color:white;font-size:22px}
 .metric-line{background:#f0f2f6;padding:8px 10px;font-weight:700;color:#1A5276;border-radius:5px;margin:8px 0px}
 </style>
-<div class="top-bar"><h2>🏥 NQAS Dashboard - UP</h2><div>Excel Load Karo &nbsp;|&nbsp; Full Report &nbsp;|&nbsp; Data Export &nbsp;|&nbsp; Chart Export</div></div>
+<div class="top-bar"><h2>🏥 NQAS Dashboard - UP</h2><div>Excel Load Karo</div></div>
 """, unsafe_allow_html=True)
 
 st.sidebar.header("1. Data Load Karo")
@@ -22,12 +22,10 @@ if uploaded is None:
 
 df = pd.read_excel(uploaded)
 df.columns = [str(c).strip() for c in df.columns]
-# Tkinter wale code jaisa - Facility/District chhod ke sab numeric banao
 for c in df.columns:
     if c not in ["PDF_File","Name of the facility","District","Date of External Assessment"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
-# === Tumhare purane code wala TABLE_MAP - Yahi asli logic hai ===
 TABLE_MAP = {
     "Table 2 - Indicators": ["State certification score of the facility","Virtual assessment score of the facility","Patient Satisfaction Score","Service Availability","Drugs Availability","Diagnostic Availability","Outcome Indicators"],
     "Table 3 - Area Wise (8 Areas)": ["Area Service Provision","Area Patients Right","Area Inputs","Area Support Services","Area Wellness Clinical Services","Area Infection Control","Area Quality Management","Area Outcome"],
@@ -36,7 +34,6 @@ TABLE_MAP = {
 TABLE_5_LABEL = "Table 5 - Standard Wise (50 Standards)"
 AREA_MAP = {"Service Provision":"Area Service Provision","Patients Right":"Area Patients Right","Inputs":"Area Inputs","Support Services":"Area Support Services","Wellness & Clinical":"Area Wellness Clinical Services","Infection Control":"Area Infection Control","Quality Management":"Area Quality Management","Outcome":"Area Outcome"}
 
-# --- Filter Bar - Photo jaisa ---
 f1, f2, f3, f4, f5 = st.columns([1.5, 2, 1.5, 1, 0.8])
 with f1:
     dist_list = ["Sabhi District"] + sorted(df["District"].dropna().astype(str).unique().tolist()) if "District" in df.columns else ["Sabhi District"]
@@ -53,7 +50,6 @@ with f5:
     if st.button("↺ Reset"):
         st.rerun()
 
-# --- Filter lagao ---
 fdf = df.copy()
 if sel_dist != "Sabhi District" and "District" in df.columns:
     fdf = fdf[fdf["District"].astype(str)==sel_dist]
@@ -70,29 +66,54 @@ avg_pss = fdf["Patient Satisfaction Score"].mean() if "Patient Satisfaction Scor
 
 st.markdown(f"""<div class="metric-line">Total: {total} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_dist} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
 
+# --- Column chuno ---
+if sel_table == TABLE_5_LABEL:
+    cols = [c for c in df.columns if re.match(r"^[A-H]\d+-", c)]
+    short = [c.split("-")[0] for c in cols]
+else:
+    cols = [c for c in TABLE_MAP.get(sel_table, []) if c in fdf.columns]
+    short = [c.replace("Area ","").replace(" Score","") for c in cols]
+if sel_area not in ["Sabhi Area","",None] and sel_table.startswith("Table 3"):
+    if sel_area in AREA_MAP:
+        cols = [AREA_MAP[sel_area]]
+        short = [sel_area]
+if not cols:
+    st.error(f"Is Table ke column Excel me nahi mile.")
+    st.stop()
+vals = [fdf[c].mean() for c in cols]
+chart_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": vals}).sort_values("Avg Score %")
+
+# ===== ASLI EXPORT BUTTON - Yahi kaam karenge =====
+st.markdown("### 📥 Export Karo - In button pe click karte hi download hoga")
+e1, e2, e3 = st.columns(3)
+
+def to_excel_bytes(sheets_dict):
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        for name, d in sheets_dict.items():
+            d.to_excel(w, sheet_name=name[:31], index=False)
+    buf.seek(0)
+    return buf.getvalue()
+
+with e1:
+    st.download_button("📥 Data Export (Filtered Excel)", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}_{sel_table[:10]}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+with e2:
+    # Full Report
+    try:
+        g = df.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
+    except:
+        g = pd.DataFrame()
+    area_cols = TABLE_MAP["Table 3 - Area Wise (8 Areas)"]
+    area_df = pd.DataFrame({"Area": area_cols, "Avg Score": [fdf[c].mean() if c in fdf.columns else 0 for c in area_cols]})
+    st.download_button("📄 Full Report (3 Sheet Excel)", data=to_excel_bytes({"Filtered Facility": fdf, "District Wise": g, "Area Wise": area_df}), file_name="Full_Report_NQAS.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+with e3:
+    st.download_button("📊 Chart Export (Chart Data Excel)", data=to_excel_bytes({"Chart Data": chart_df}), file_name=f"Chart_{sel_table[:10]}_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+st.info("💡 Chart ki photo chahiye to Chart ke upar Right side me Camera 📷 wale icon pe click karo - wahan se PNG download ho jayega.")
+
 tab1, tab2, tab3 = st.tabs(["📊 Chart + Table Wise", "🏥 Facility Wise", "🗺️ District Wise"])
 
 with tab1:
-    # --- Column chuno - Tkinter wala logic ---
-    if sel_table == TABLE_5_LABEL:
-        cols = [c for c in df.columns if re.match(r"^[A-H]\d+-", c)]
-        short = [c.split("-")[0] for c in cols]
-    else:
-        cols = [c for c in TABLE_MAP.get(sel_table, []) if c in fdf.columns]
-        short = [c.replace("Area ","").replace(" Score","") for c in cols]
-
-    # Agar Area select hai aur Table 3 hai to sirf 1 column
-    if sel_area not in ["Sabhi Area","",None] and sel_table.startswith("Table 3"):
-        if sel_area in AREA_MAP:
-            cols = [AREA_MAP[sel_area]]
-            short = [sel_area]
-
-    if not cols:
-        st.error(f"Is Table ke column Excel me nahi mile. Excel ke columns: {list(df.columns)}")
-        st.stop()
-
-    vals = [fdf[c].mean() for c in cols]
-
     st.markdown(f"<h4 style='text-align:center'>{sel_table} - Chart ({sel_dist})</h4>", unsafe_allow_html=True)
     c_chart, c_table = st.columns([1.4, 1])
     with c_chart:
@@ -108,8 +129,7 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
     with c_table:
         st.markdown(f"<h5 style='text-align:center'>{sel_table} - Table (Weak se Strong)</h5>", unsafe_allow_html=True)
-        table_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": vals}).sort_values("Avg Score %")
-        st.dataframe(table_df, use_container_width=True, height=550)
+        st.dataframe(chart_df, use_container_width=True, height=550)
 
 with tab2:
     st.subheader("Facility Wise")
@@ -120,10 +140,10 @@ with tab2:
 with tab3:
     st.subheader("District Wise")
     if "District" in df.columns and col_overall in df.columns:
-        g = df.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
-        g.columns = ["District","Facility Count","Avg Overall %","Avg PSS %"]
-        st.dataframe(g, use_container_width=True)
+        g2 = df.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
+        g2.columns = ["District","Facility Count","Avg Overall %","Avg PSS %"]
+        st.dataframe(g2, use_container_width=True)
         fig3 = go.Figure()
-        fig3.add_trace(go.Bar(x=g["District"], y=g["Avg Overall %"], marker_color=["#27AE60" if v>=70 else "#F39C12" for v in g["Avg Overall %"]], text=g["Avg Overall %"].round(1).astype(str)+"%", textposition="outside"))
+        fig3.add_trace(go.Bar(x=g2["District"], y=g2["Avg Overall %"], marker_color=["#27AE60" if v>=70 else "#F39C12" for v in g2["Avg Overall %"]], text=g2["Avg Overall %"].round(1).astype(str)+"%", textposition="outside"))
         fig3.update_layout(yaxis_range=[0,100], xaxis_tickangle=-45, height=500)
         st.plotly_chart(fig3, use_container_width=True)
