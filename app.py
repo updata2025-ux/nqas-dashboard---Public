@@ -36,7 +36,6 @@ TABLE_MAP = {
 TABLE_5_LABEL = "Table 5 - Standard Wise (50 Standards)"
 AREA_MAP = {"Service Provision":"Area Service Provision","Patients Right":"Area Patients Right","Inputs":"Area Inputs","Support Services":"Area Support Services","Wellness & Clinical":"Area Wellness Clinical Services","Infection Control":"Area Infection Control","Quality Management":"Area Quality Management","Outcome":"Area Outcome"}
 
-# ===== A-H KI JAGAH POORA NAAM - Yahi naya mapping hai =====
 LETTER_LABEL = {
     "A": "A- Service Provision",
     "B": "B- Patients Right",
@@ -80,7 +79,7 @@ for c in table5_all_cols:
 
 sel_standards = []
 if sel_table == TABLE_5_LABEL:
-    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Ab 2 Step me Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Step 1: Area chuno &nbsp;→&nbsp; Step 2: Standard chuno</div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Step 1 chunte hi Chart ban jayega, Step 2 sirf kam karne ke liye hai</div>""", unsafe_allow_html=True)
 
     all_letters = sorted(list(set([s[0] for s in short_to_full.keys()])))
     col_step1, col_step2 = st.columns(2)
@@ -91,34 +90,37 @@ if sel_table == TABLE_5_LABEL:
             options=all_letters,
             default=[],
             placeholder="Dropdown kholo - A- Service Provision, B- Patients Right... chuno",
-            format_func=lambda x: LETTER_LABEL.get(x, x),  # <-- Yahi line A ki jagah A- Service Provision dikhayegi
-            help="A- Service Provision chunoge to sirf A wale Standard aayenge. A aur B chunoge to A1 se B5 tak aayenge.",
+            format_func=lambda x: LETTER_LABEL.get(x, x),
+            help="A- Service Provision chunoge to sirf A wale Standard ka Chart banega.",
             key="letter_multi"
         )
     with col_step2:
-        st.markdown("<div class='step-box'><b>Step 2 - Standard Chuno:</b></div>", unsafe_allow_html=True)
+        st.markdown("<div class='step-box'><b>Step 2 - Standard Chuno (Zaroori Nahi):</b></div>", unsafe_allow_html=True)
         if len(sel_letters)==0:
-            st.info("👈 Pehle Step 1 se Area chuno, tabhi yahan Standard aayenge.")
+            st.info("👈 Pehle Step 1 se Area chuno, tabhi Chart banega.")
             sel_short = []
+            filtered_shorts = []
         else:
             filtered_shorts = [s for s in sorted(short_to_full.keys()) if s[0] in sel_letters]
             sel_labels = [LETTER_LABEL.get(l, l) for l in sel_letters]
-            st.caption(f"Step 1 me chuney: {', '.join(sel_labels)} → Yahan {len(filtered_shorts)} Standard aaye: {', '.join(filtered_shorts)}")
+            st.caption(f"Step 1 me chuney: {', '.join(sel_labels)} → Total {len(filtered_shorts)} Standard: {', '.join(filtered_shorts)}")
             sel_short = st.multiselect(
-                "2️⃣ Standard Select Karo (Dropdown):",
+                "2️⃣ Standard - Agar kam karna hai to yahan se hatao / chuno, warna khaali chhodo:",
                 options=filtered_shorts,
                 default=[],
-                placeholder="Dropdown kholo - A1, A2... chuno",
-                help="Yahan sirf Step 1 me chuney hue Area wale Standard dikhenge.",
+                placeholder="Khaali chhodo to saare aa jayenge - A1, A2...",
+                help="Khaali chhodo to Step 1 wale saare Standard ka Chart banega. Kuch hatana hai to yahan chuno.",
                 key="std_multi_dropdown"
             )
+        # ===== FIX 2 - Step 1 chunte hi Chart =====
+        # Agar Step 2 khaali hai to Step 1 wale SAARRE Standard auto le lo
+        if len(sel_letters)>0 and len(sel_short)==0:
+            sel_short = filtered_shorts
+            st.info(f"ℹ️ Step 2 khaali hai, isliye Step 1 wale saare {len(sel_short)} Standard ka Chart ban raha hai.")
         sel_standards = [short_to_full[s] for s in sel_short]
 
     if len(sel_letters)==0:
         st.info("👆 Step 1 se pehle Area chuno - jaise A- Service Provision.")
-        st.stop()
-    if len(sel_standards)==0:
-        st.info("👆 Step 2 se ab A1, A2... chuno, tabhi Chart banega.")
         st.stop()
     else:
         sel_labels2 = [LETTER_LABEL.get(l, l) for l in sel_letters]
@@ -159,7 +161,11 @@ if not cols:
     st.stop()
 
 vals = [fdf[c].mean() for c in cols]
-chart_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": [f"{v:.2f}" for v in vals]}).sort_values("Avg Score %")
+# ===== FIX 1 - Double hataya: Ab sirf 1 baar naam aayega =====
+# Pehle tha: f"{s} - {full}" -> A1 - A1-The facility... (Double)
+# Ab hai: sirf full -> A1-The facility... (Single)
+chart_df = pd.DataFrame({"Indicator / Area / Standard": [full[:70] for full in cols], "Avg Score %": [f"{v:.2f}" for v in vals]}).sort_values("Avg Score %")
+
 colors = ["#27AE60" if v>=70 else "#F39C12" if v>=50 else "#E74C3C" for v in vals]
 fig = go.Figure()
 if len(cols) > 15:
