@@ -181,7 +181,7 @@ def to_excel_bytes(sheets_dict):
     buf.seek(0)
     return buf.getvalue()
 with e1:
-    st.download_button("📥 Data Export", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    st.download_button("📥 All Data Export", data=to_excel_bytes({"Filtered Facility": fdf}), file_name=f"Filtered_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e2:
     try:
         g = fdf.groupby("District").agg(Count=("Name of the facility","count"), AvgOverall=(col_overall,"mean"), AvgPSS=("Patient Satisfaction Score","mean")).reset_index().sort_values("AvgOverall", ascending=False)
