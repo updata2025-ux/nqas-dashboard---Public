@@ -10,6 +10,7 @@ st.markdown("""
 .top-bar{background:#1A5276;color:white;padding:10px 15px;border-radius:5px;display:flex;justify-content:space-between;align-items:center}
 .top-bar h2{margin:0;color:white;font-size:22px}
 .metric-line{background:#f0f2f6;padding:8px 10px;font-weight:700;color:#1A5276;border-radius:5px;margin:8px 0px}
+.highlight-box{background:#FEF9E7;border:2px solid #F1C40F;padding:10px;border-radius:8px;margin:10px 0px}
 </style>
 <div class="top-bar"><h2>🏥 NQAS Dashboard - UP</h2><div>Excel Load Karo</div></div>
 """, unsafe_allow_html=True)
@@ -34,7 +35,7 @@ TABLE_MAP = {
 TABLE_5_LABEL = "Table 5 - Standard Wise (50 Standards)"
 AREA_MAP = {"Service Provision":"Area Service Provision","Patients Right":"Area Patients Right","Inputs":"Area Inputs","Support Services":"Area Support Services","Wellness & Clinical":"Area Wellness Clinical Services","Infection Control":"Area Infection Control","Quality Management":"Area Quality Management","Outcome":"Area Outcome"}
 
-# ===== FILTER BAR - District | Table | Facility | Area =====
+# ===== FILTER BAR =====
 f1, f2, f3, f4 = st.columns([1.3, 1.8, 1.8, 1.3])
 with f1:
     dist_list = ["Sabhi District"] + sorted(df["District"].dropna().astype(str).unique().tolist()) if "District" in df.columns else ["Sabhi District"]
@@ -42,7 +43,6 @@ with f1:
 with f2:
     sel_table = st.selectbox("Table:", ["Table 2 - Indicators","Table 3 - Area Wise (8 Areas)","Table 4 - Theme Wise (12 Themes)", TABLE_5_LABEL], index=1)
 with f3:
-    # Facility list - District ke hisaab se
     temp_df = df.copy()
     if sel_dist != "Sabhi District":
         temp_df = temp_df[temp_df["District"].astype(str)==sel_dist]
@@ -57,6 +57,29 @@ with c_btn1:
 with c_btn2:
     if st.button("↺ Reset", use_container_width=True):
         st.rerun()
+
+# ===== NAYA BUTTON - MULTIPLE STANDARD SELECT - SIRF TABLE 5 PE CHALEGA =====
+# Table 5 ke saare Standard nikal lo
+table5_all_cols = [c for c in df.columns if re.match(r"^[A-H]\d+-", c)]
+sel_standards = []  # default khali
+
+if sel_table == TABLE_5_LABEL:
+    st.markdown(f"""<div class="highlight-box">✅ <b>Table 5 Select Hai - Ab Neeche se Multiple Standard Chuno</b> &nbsp;|&nbsp; Total Standard: {len(table5_all_cols)} &nbsp;|&nbsp; Jo chunoge, Chart sirf unhi ka banega</div>""", unsafe_allow_html=True)
+    # Multiselect - Ek saath kai Standard chun sakte ho
+    sel_standards = st.multiselect(
+        "🔍 Multiple Standard Select Karo (Table 5 ke liye) - Ek se zyada chun sakte ho:",
+        options=table5_all_cols,
+        default=table5_all_cols,  # Shuru me saare select rahenge, tum hata / chun sakte ho
+        help="Table 5 select karne pe hi ye kaam karega. Ctrl / tap karke kai Standard chuno.",
+        key="std_multi"
+    )
+    st.caption(f"👉 Chuney hue Standard: {len(sel_standards)} / {len(table5_all_cols)}")
+    if len(sel_standards)==0:
+        st.warning("⚠️ Koi Standard nahi chuna hai. Upar se kam se kam 1 Standard chuno.")
+        st.stop()
+else:
+    # Baaki Table pe ye box band / highlight nahi hoga
+    st.caption("ℹ️ Multiple Standard wala option sirf **Table 5 - Standard Wise** select karne pe khulega. Abhi Table 5 select nahi hai, isliye wo band hai.")
 
 # --- Filter lagao ---
 fdf = df.copy()
@@ -75,12 +98,12 @@ highest = fdf[col_overall].max() if col_overall in fdf.columns else 0
 lowest = fdf[col_overall].min() if col_overall in fdf.columns else 0
 avg_pss = fdf["Patient Satisfaction Score"].mean() if "Patient Satisfaction Score" in fdf.columns else 0
 
-# 2 Decimal - Sab jagah .2f
 st.markdown(f"""<div class="metric-line">Total: {total} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_dist} &nbsp;|&nbsp; Facility: {sel_fac} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
 
 # --- Column chuno ---
 if sel_table == TABLE_5_LABEL:
-    cols = [c for c in df.columns if re.match(r"^[A-H]\d+-", c)]
+    # Yahan wahi chuney hue Standard kaam karenge
+    cols = [c for c in sel_standards if c in fdf.columns]
     short = [c.split("-")[0] for c in cols]
 else:
     cols = [c for c in TABLE_MAP.get(sel_table, []) if c in fdf.columns]
@@ -94,10 +117,8 @@ if not cols:
     st.stop()
 
 vals = [fdf[c].mean() for c in cols]
-# 2 Decimal wali Table
 chart_df = pd.DataFrame({"Indicator / Area / Standard": [f"{s} - {full[:60]}" for s, full in zip(short, cols)], "Avg Score %": [f"{v:.2f}" for v in vals]}).sort_values("Avg Score %")
 
-# --- Chart pehle banao taaki PNG Export me kaam aaye ---
 colors = ["#27AE60" if v>=70 else "#F39C12" if v>=50 else "#E74C3C" for v in vals]
 fig = go.Figure()
 if len(cols) > 15:
@@ -132,7 +153,6 @@ with e2:
 with e3:
     st.download_button("📊 Chart Data Excel", data=to_excel_bytes({"Chart Data": chart_df}), file_name=f"Chart_{sel_table[:10]}_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e4:
-    # Chart PNG Export - 2 tarika
     try:
         png_bytes = fig.to_image(format="png", width=1200, height=700, scale=2)
         st.download_button("🖼️ Chart PNG Export", data=png_bytes, file_name=f"Chart_{sel_table[:10]}_{sel_dist}.png", mime="image/png", use_container_width=True)
@@ -153,7 +173,6 @@ with tab2:
     show_cols = ["Name of the facility","District", col_overall, "Patient Satisfaction Score", "Area Service Provision","Area Inputs","Area Infection Control","Area Quality Management"]
     show_cols = [c for c in show_cols if c in fdf.columns]
     disp = fdf[show_cols].copy()
-    # 2 Decimal me dikhao
     for c in disp.columns:
         if c not in ["Name of the facility","District"]:
             disp[c] = disp[c].map(lambda x: f"{x:.2f}" if pd.notna(x) else "")
@@ -166,7 +185,6 @@ with tab3:
         g2["AvgPSS"] = g2["AvgPSS"].map(lambda x: f"{x:.2f}")
         g2.columns = ["District","Facility Count","Avg Overall %","Avg PSS %"]
         st.dataframe(g2, use_container_width=True)
-        # Chart ke liye numeric wapas
         g3 = df.groupby("District").agg(AvgOverall=(col_overall,"mean")).reset_index().sort_values("AvgOverall", ascending=False)
         fig3 = go.Figure()
         fig3.add_trace(go.Bar(x=g3["District"], y=g3["AvgOverall"], marker_color=["#27AE60" if v>=70 else "#F39C12" for v in g3["AvgOverall"]], text=[f"{v:.2f}%" for v in g3["AvgOverall"]], textposition="outside"))
