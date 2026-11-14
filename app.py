@@ -189,7 +189,7 @@ with e2:
         g = pd.DataFrame()
     area_cols = TABLE_MAP["Table 3 - Area Wise (8 Areas)"]
     area_df = pd.DataFrame({"Area": area_cols, "Avg Score": [f"{fdf[c].mean():.2f}" if c in fdf.columns else "0.00" for c in area_cols]})
-    st.download_button("📄 Full Report", data=to_excel_bytes({"Filtered Facility": fdf, "District Wise": g, "Area Wise": area_df}), file_name="Full_Report_NQAS.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    st.download_button("📄 Filtered Report Export", data=to_excel_bytes({"Filtered Facility": fdf, "District Wise": g, "Area Wise": area_df}), file_name="Full_Report_NQAS.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e3:
     st.download_button("📊 Chart Data Excel", data=to_excel_bytes({"Chart Data": chart_df}), file_name=f"Chart_{sel_table[:10]}_{sel_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 with e4:
