@@ -24,9 +24,97 @@ if uploaded is None:
 
 df = pd.read_excel(uploaded)
 df.columns = [str(c).strip() for c in df.columns]
+
+# ============================================================
+# CRITERIA MET CONFIGURATION
+# ============================================================
+CRITERIA_MET_COLUMNS = [
+    "Aggregate score of the health facility Meets Criteria",
+    "Score of each Service Package of the health facility Meets Criteria",
+    "Aggregated score in each Area of Concern Meets Criteria",
+    "Standards A1,D3,D4,D5,G2 Meets Criteria",
+    "Individual Standard Meets Criteria",
+    "Patient Satisfaction Criteria"
+]
+
+CRITERIA_MET_SHORT = [
+    "Aggregate Health Facility Score",
+    "Service Package Score",
+    "Area of Concern Score",
+    "Standards A1,D3,D4,D5,G2",
+    "Individual Standard",
+    "Patient Satisfaction"
+]
+
+# Criteria columns ko text hi rakhenge, taaki "Criteria Met/Not Met" preserve rahe.
+PROTECTED_TEXT_COLUMNS = {
+    "PDF_File",
+    "Name of the facility",
+    "District",
+    "Date of External Assessment",
+    *CRITERIA_MET_COLUMNS
+}
+
 for c in df.columns:
-    if c not in ["PDF_File","Name of the facility","District","Date of External Assessment"]:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
+    if c in PROTECTED_TEXT_COLUMNS:
+        continue
+    converted = pd.to_numeric(df[c], errors="coerce")
+    non_blank = df[c].notna().sum()
+    if non_blank > 0 and converted.notna().sum() >= max(3, int(0.60 * non_blank)):
+        df[c] = converted
+
+
+def normalize_header(value):
+    return re.sub(r"\s+", " ", str(value).replace("\n", " ")).strip().lower()
+
+
+def find_criteria_column(target):
+    target_norm = normalize_header(target)
+
+    # Exact normalized match
+    for c in df.columns:
+        if normalize_header(c) == target_norm:
+            return c
+
+    # Match after removing punctuation/spaces
+    target_compact = re.sub(r"[^a-z0-9]", "", target_norm)
+    for c in df.columns:
+        c_compact = re.sub(r"[^a-z0-9]", "", normalize_header(c))
+        if c_compact == target_compact:
+            return c
+
+    return None
+
+
+def criteria_met_counts(dataframe):
+    actual_cols = []
+    counts = []
+    not_met_counts = []
+
+    for target in CRITERIA_MET_COLUMNS:
+        col = find_criteria_column(target)
+        actual_cols.append(col)
+
+        if col is None or col not in dataframe.columns:
+            counts.append(0)
+            not_met_counts.append(0)
+            continue
+
+        s = (
+            dataframe[col]
+            .astype(str)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+            .str.lower()
+        )
+
+        met = int((s == "criteria met").sum())
+        not_met = int((s == "criteria not met").sum())
+        counts.append(met)
+        not_met_counts.append(not_met)
+
+    return actual_cols, counts, not_met_counts
+
 
 TABLE_MAP = {
     "Table 2 - Indicators": ["State certification score of the facility","Virtual assessment score of the facility","Patient Satisfaction Score","Service Availability","Drugs Availability","Diagnostic Availability","Outcome Indicators"],
@@ -53,7 +141,7 @@ with f1:
     dist_list = ["All District"] + sorted(df["District"].dropna().astype(str).unique().tolist()) if "District" in df.columns else ["All District"]
     sel_dist = st.selectbox("District:", dist_list)
 with f2:
-    sel_table = st.selectbox("Table:", ["Table 2 - Indicators","Table 3 - Area Wise (8 Areas)","Table 4 - Theme Wise (12 Themes)", TABLE_5_LABEL], index=1)
+    sel_table = st.selectbox("Table:", ["Table 2 - Indicators","Table 3 - Area Wise (8 Areas)","Table 4 - Theme Wise (12 Themes)", TABLE_5_LABEL, "Criteria Met"], index=1)
 with f3:
     temp_df = df.copy()
     if sel_dist != "All District":
@@ -144,6 +232,90 @@ lowest = fdf[col_overall].min() if col_overall in fdf.columns else 0
 avg_pss = fdf["Patient Satisfaction Score"].mean() if "Patient Satisfaction Score" in fdf.columns else 0
 st.markdown(f"""<div class="metric-line">Total: {total} &nbsp;|&nbsp; Avg Overall: {avg_overall:.2f}% &nbsp;|&nbsp; Highest: {highest:.2f}% &nbsp;|&nbsp; Lowest: {lowest:.2f}% &nbsp;|&nbsp; Avg PSS: {avg_pss:.2f}% &nbsp;|&nbsp; District: {sel_dist} &nbsp;|&nbsp; Facility: {sel_fac} &nbsp;|&nbsp; Table: {sel_table}</div>""", unsafe_allow_html=True)
 
+# ============================================================
+# CRITERIA MET CHART
+# ============================================================
+if sel_table == "Criteria Met":
+    actual_cols, met_counts, not_met_counts = criteria_met_counts(fdf)
+    missing_cols = [CRITERIA_MET_COLUMNS[i] for i, c in enumerate(actual_cols) if c is None]
+    total_facilities = len(fdf)
+
+    criteria_chart_df = pd.DataFrame({
+        "Criteria": CRITERIA_MET_SHORT,
+        "Facilities Criteria Met": met_counts,
+        "% Facilities": [round((x / total_facilities) * 100, 2) if total_facilities else 0 for x in met_counts],
+        "Criteria Not Met": not_met_counts
+    })
+
+    # Chart: 6 bars, count of facilities meeting each criterion
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=criteria_chart_df["Facilities Criteria Met"],
+        y=criteria_chart_df["Criteria"],
+        orientation="h",
+        marker_color="#27AE60",
+        text=[f"{n} ({p:.1f}%)" for n, p in zip(criteria_chart_df["Facilities Criteria Met"], criteria_chart_df["% Facilities"])],
+        textposition="outside",
+        hovertemplate="%{y}<br>Criteria Met: %{x}<br>Facilities: %{customdata:.1f}%<extra></extra>",
+        customdata=criteria_chart_df["% Facilities"]
+    ))
+    fig.update_layout(
+        title=f"Criteria Met - {sel_fac if sel_fac!='All Facility' else sel_dist}",
+        xaxis_title="Number of Facilities - Criteria Met",
+        yaxis_title="",
+        xaxis=dict(dtick=1, rangemode="tozero"),
+        height=520,
+        margin=dict(l=260, r=80, t=80, b=70)
+    )
+
+    st.markdown("### 📊 Criteria Met Chart")
+    st.plotly_chart(fig, use_container_width=True)
+
+    if missing_cols:
+        st.warning("Excel me ye Criteria columns nahi mile: " + ", ".join(missing_cols))
+
+    st.markdown("### 📋 Criteria Met Table")
+    display_criteria_df = criteria_chart_df.copy()
+    display_criteria_df["% Facilities"] = display_criteria_df["% Facilities"].map(lambda x: f"{x:.2f}%")
+    st.dataframe(display_criteria_df, use_container_width=True, height=330)
+
+    st.markdown("### 📥 Criteria Met Export")
+    def to_excel_bytes(sheets_dict):
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as w:
+            for name, d in sheets_dict.items():
+                d.to_excel(w, sheet_name=name[:31], index=False)
+        buf.seek(0)
+        return buf.getvalue()
+
+    ce1, ce2 = st.columns(2)
+    with ce1:
+        st.download_button(
+            "📊 Criteria Met Data Excel",
+            data=to_excel_bytes({"Criteria Met": criteria_chart_df, "Filtered Facility": fdf}),
+            file_name=f"Criteria_Met_{sel_dist}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with ce2:
+        try:
+            png_bytes = fig.to_image(format="png", width=1400, height=700, scale=2)
+            st.download_button(
+                "🖼️ Criteria Met Chart PNG",
+                data=png_bytes,
+                file_name=f"Criteria_Met_{sel_dist}.png",
+                mime="image/png",
+                use_container_width=True
+            )
+        except Exception:
+            st.info("PNG export ke liye Plotly Camera 📷 icon use karein.")
+
+    # Criteria Met selected hone par neeche ke normal numeric chart ko repeat na karein.
+    st.stop()
+
+# ============================================================
+# NORMAL TABLE CHARTS
+# ============================================================
 if sel_table == TABLE_5_LABEL:
     cols = [c for c in sel_standards if c in fdf.columns]
     short = [c.split("-")[0] for c in cols]
@@ -198,7 +370,7 @@ with e4:
         st.download_button("🖼️ Chart PNG Export", data=png_bytes, file_name=f"Chart_{sel_table[:10]}_{sel_dist}.png", mime="image/png", use_container_width=True)
     except Exception as ex:
         pass
-        
+
         #st.info("PNG ke liye Chart pe Camera 📷 icon dabao")
 
 tab1, tab2, tab3 = st.tabs(["📊 Chart + Table Wise", "🏥 Facility Wise", "🗺️ District Wise"])
